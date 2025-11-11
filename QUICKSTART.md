@@ -7,13 +7,28 @@
 pip install -r requirements.txt
 ```
 
-### 2. Run the Application
+-### 2. Run the Application (Local server)
+
+Run the FastAPI server and open the static frontend:
+
 ```bash
-streamlit run app.py
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1   # Windows PowerShell
+python -m pip install -r requirements.txt
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 3. Analyze a Document
-- The app will open in your browser at `http://localhost:8501`
+Open `http://localhost:8000` in your browser and paste text or upload a file and click Analyze.
+
+### 3. (Optional) Run legacy Streamlit UI
+
+If you prefer the original Streamlit interface (kept for convenience):
+
+```bash
+pip install -r dev-requirements.txt
+streamlit run legacy_app.py
+```
+
 - Try the included sample: Copy text from `sample_document.txt`
 - Paste into the text area or upload your own document
 - Click "Analyze Document"

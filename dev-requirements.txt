@@ -1,9 +1,16 @@
+streamlit==1.31.0
 pandas==2.1.4
+matplotlib==3.8.2
+seaborn==0.13.0
+wordcloud==1.9.3
 plotly==5.18.0
 numpy==1.26.3
+nltk==3.8.1
 python-docx==1.1.0
 PyPDF2==3.0.1
 openpyxl==3.1.2
+
+# Server deps (also present in requirements.txt)
 fastapi==0.95.2
 uvicorn==0.22.0
 python-multipart==0.0.6

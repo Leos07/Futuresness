@@ -57,14 +57,32 @@ python -c "import nltk; nltk.download('punkt')"
 
 ## Usage
 
-### Running the Application
+### Running the Application (Local & Vercel)
 
-Start the Streamlit application:
+There are two supported ways to run the project now:
+
+1) Run the new FastAPI server locally (recommended for Vercel parity):
+
 ```bash
-streamlit run app.py
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1   # Windows PowerShell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The application will open in your default web browser at `http://localhost:8501`
+Open http://localhost:8000 to use the simple static frontend which calls the API.
+
+2) (Optional) Legacy Streamlit interface
+
+If you prefer the original Streamlit UI (kept for convenience), you can run the preserved legacy app:
+
+```bash
+pip install -r dev-requirements.txt
+streamlit run legacy_app.py
+```
+
+Note: the Streamlit app is kept as a legacy entrypoint. The Vercel-targeted FastAPI server is the primary deployment target.
 
 ### Input Methods
 
@@ -136,8 +154,10 @@ Download your analysis results in two formats:
 
 ## Technical Details
 
-### Technology Stack
-- **Streamlit**: Interactive web interface
+- **FastAPI**: Server API used by the Vercel deployment and local server
+- **Static frontend**: Lightweight `static/index.html` used to call the API
+- **Uvicorn**: ASGI server for running the FastAPI app locally
+- **Streamlit** (optional): Original interactive UI (kept for local use)
 - **Pandas**: Data manipulation and analysis
 - **Plotly**: Interactive visualizations
 - **Matplotlib/Seaborn**: Static visualizations

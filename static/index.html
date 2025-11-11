@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Futuresness Analyzer</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 1rem; }
+      textarea { width: 100%; height: 200px; }
+      .row { display:flex; gap:1rem; }
+      .col { flex:1 }
+      button { padding: 0.6rem 1rem; }
+      img.wordcloud { max-width:100%; height:auto; }
+    </style>
+  </head>
+  <body>
+    <h1>🔮 Futuresness Analyzer (Vercel)</h1>
+    <p>Paste text or upload a document and click Analyze.</p>
+
+    <div>
+      <label>Paste text:</label>
+      <textarea id="textInput" placeholder="Paste your document text here..."></textarea>
+    </div>
+
+    <div>
+      <label>Or upload file (txt, pdf, docx):</label>
+      <input type="file" id="fileInput" />
+    </div>
+
+    <div style="margin-top:1rem;">
+      <button id="analyzeBtn">🔍 Analyze</button>
+    </div>
+
+    <hr />
+
+  <div id="results"></div>
+  <canvas id="wordcloudCanvas" style="width:100%; height:400px; display:block; margin-top:1rem;"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.1.1/src/wordcloud2.min.js"></script>
+  <script>
+      const btn = document.getElementById('analyzeBtn');
+      const results = document.getElementById('results');
+
+      btn.addEventListener('click', async () => {
+        results.innerHTML = '<p>Analyzing…</p>';
+        const text = document.getElementById('textInput').value;
+        const fileInput = document.getElementById('fileInput');
+        const form = new FormData();
+        form.append('text', text || '');
+        if (fileInput.files.length > 0) {
+          form.append('file', fileInput.files[0]);
+        }
+        form.append('include_wordcloud', 'true');
+
+        try {
+          const res = await fetch('/analyze', { method: 'POST', body: form });
+          if (!res.ok) throw new Error('Server error');
+          const data = await res.json();
+          renderResults(data);
+        } catch (err) {
+          results.innerHTML = '<p style="color:red">Error: ' + err.message + '</p>';
+        }
+      });
+
+      function renderResults(data) {
+        let html = '';
+        const s = data.statistics || {};
+        html += `<h2>Results</h2>`;
+        html += `<p><strong>Total words:</strong> ${s.word_count || 0} — <strong>Futures terms found:</strong> ${s.total_terms || 0} — <strong>Unique terms:</strong> ${s.unique_terms || 0} — <strong>Density:</strong> ${s.density ? s.density.toFixed(2) + '%' : '0%'}</p>`;
+
+        // Render client-side word cloud using word frequencies (preferred)
+        const freqs = data.word_frequencies || {};
+        const list = Object.keys(freqs).map(k => [k, freqs[k]]).sort((a,b) => b[1]-a[1]).slice(0,200);
+        if (list.length) {
+          html += '<h3>Word Cloud (client-side)</h3>';
+          // Clear previous canvas
+          const canvas = document.getElementById('wordcloudCanvas');
+          canvas.width = canvas.clientWidth * devicePixelRatio;
+          canvas.height = 400 * devicePixelRatio;
+          // Use WordCloud2.js if available
+          if (typeof WordCloud !== 'undefined') {
+            WordCloud(canvas, {
+              list: list,
+              gridSize: Math.round(16 * (canvas.width / 800)),
+              weightFactor: function (size) { return Math.pow(size, 0.9) * (canvas.width / 800); },
+              rotateRatio: 0.35,
+              rotationSteps: 2,
+              backgroundColor: '#ffffff',
+              color: 'random-dark'
+            });
+          } else {
+            // Fallback: show simple list
+            html += '<p>(WordCloud JS not loaded - showing top terms list)</p>';
+            html += '<ul>';
+            list.slice(0,50).forEach(t => html += `<li>${t[0]} — ${t[1]}</li>`);
+            html += '</ul>';
+          }
+        }
+
+        if (data.term_matches && data.term_matches.length) {
+          html += '<h3>Top Terms</h3><ul>';
+          data.term_matches.slice(0,20).forEach(t => {
+            html += `<li>${t.term} — ${t.frequency} (${t.category})</li>`;
+          });
+          html += '</ul>';
+        } else {
+          html += '<p>No futures terms found.</p>';
+        }
+
+        results.innerHTML = html;
+      }
+    </script>
+  </body>
+</html>

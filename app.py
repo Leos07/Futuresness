@@ -1,50 +1,20 @@
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from wordcloud import WordCloud
-import plotly.express as px
-import plotly.graph_objects as go
-from collections import Counter, defaultdict
-import re
-import io
-import json
-from datetime import datetime
-import numpy as np
+"""
+DEPRECATED: `app.py` (legacy Streamlit UI)
 
-# Import for file handling
-try:
-    from docx import Document
-    import PyPDF2
-except ImportError:
-    pass
+This file used to contain the Streamlit application. The project now uses a FastAPI
+server (`api/main.py`) and a lightweight static frontend for deployment on Vercel.
 
-# Set page configuration
-st.set_page_config(
-    page_title="Futures Studies Vocabulary Analyzer",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+If you still want to run the legacy Streamlit interface locally, run:
 
-# Custom CSS for better styling
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1   # PowerShell
+    python -m pip install -r dev-requirements.txt
+    streamlit run legacy_app.py
+
+The full Streamlit app has been preserved in `legacy_app.py`.
+"""
+
+print("This repository has migrated to a FastAPI-based server. See README for details.")
 
 # Comprehensive Futures Studies Vocabulary Database
 FUTURES_VOCABULARY = {
