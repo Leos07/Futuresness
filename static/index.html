@@ -29,14 +29,19 @@
 
     <div style="margin-top:1rem;">
       <button id="analyzeBtn">🔍 Analyze</button>
+      <label style="margin-left:1rem">Top N terms: <input id="topN" type="range" min="5" max="200" value="50" style="vertical-align:middle;"/></label>
+      <span id="topNVal" style="margin-left:.5rem">50</span>
+      <label style="margin-left:1rem">Co-occurrence window: <input id="cooccWindow" type="range" min="20" max="500" value="100" style="vertical-align:middle;"/></label>
+      <span id="cooccVal" style="margin-left:.5rem">100</span>
+      <label style="margin-left:1rem">Filter category: <select id="categoryFilter"><option value="__all">All</option></select></label>
     </div>
 
     <hr />
 
   <div id="results"></div>
   <canvas id="wordcloudCanvas" style="width:100%; height:400px; display:block; margin-top:1rem;"></canvas>
-
   <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.1.1/src/wordcloud2.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
   <script>
       const btn = document.getElementById('analyzeBtn');
       const results = document.getElementById('results');
@@ -45,12 +50,13 @@
         results.innerHTML = '<p>Analyzing…</p>';
         const text = document.getElementById('textInput').value;
         const fileInput = document.getElementById('fileInput');
-        const form = new FormData();
+    const form = new FormData();
         form.append('text', text || '');
         if (fileInput.files.length > 0) {
           form.append('file', fileInput.files[0]);
         }
-        form.append('include_wordcloud', 'true');
+  form.append('include_wordcloud', 'true');
+  form.append('cooccurrence_window', document.getElementById('cooccWindow').value);
 
         try {
           const res = await fetch('/analyze', { method: 'POST', body: form });
@@ -62,16 +68,28 @@
         }
       });
 
+      // UI controls
+      const topN = document.getElementById('topN');
+      const topNVal = document.getElementById('topNVal');
+      const cooccWindow = document.getElementById('cooccWindow');
+      const cooccVal = document.getElementById('cooccVal');
+      const categoryFilter = document.getElementById('categoryFilter');
+
+      topN.addEventListener('input', () => topNVal.innerText = topN.value);
+      cooccWindow.addEventListener('input', () => cooccVal.innerText = cooccWindow.value);
+
       function renderResults(data) {
-        let html = '';
-        const s = data.statistics || {};
-        html += `<h2>Results</h2>`;
-        html += `<p><strong>Total words:</strong> ${s.word_count || 0} — <strong>Futures terms found:</strong> ${s.total_terms || 0} — <strong>Unique terms:</strong> ${s.unique_terms || 0} — <strong>Density:</strong> ${s.density ? s.density.toFixed(2) + '%' : '0%'}</p>`;
+  let html = '';
+  const s = data.statistics || {};
+  html += `<h2>Results</h2>`;
+  html += `<p><strong>Total words:</strong> ${s.word_count || 0} — <strong>Futures terms found:</strong> ${s.total_terms || 0} — <strong>Unique terms:</strong> ${s.unique_terms || 0}</p>`;
+  html += `<p><strong>Density:</strong> ${s.density ? s.density.toFixed(2) + '%' : '0%'} — <strong>Normalized (per 1000 words):</strong> ${s.normalized_per_1000 ? s.normalized_per_1000.toFixed(2) : '0'}</p>`;
+  html += `<p><strong>Category coverage:</strong> ${s.category_coverage_percent ? s.category_coverage_percent.toFixed(1) + '%' : '0%'}</p>`;
 
         // Render client-side word cloud using word frequencies (preferred)
         const freqs = data.word_frequencies || {};
         const list = Object.keys(freqs).map(k => [k, freqs[k]]).sort((a,b) => b[1]-a[1]).slice(0,200);
-        if (list.length) {
+  if (list.length) {
           html += '<h3>Word Cloud (client-side)</h3>';
           // Clear previous canvas
           const canvas = document.getElementById('wordcloudCanvas');
@@ -97,17 +115,185 @@
           }
         }
 
+          // Chart containers
+          html += '<div id="charts" style="display:grid; grid-template-columns: 1fr; gap:1rem; margin-top:1rem;">';
+          html += '<div id="categoryChart" style="width:100%;height:360px;"></div>';
+          html += '<div id="topTermsChart" style="width:100%;height:420px;"></div>';
+          html += '<div id="approachChart" style="width:100%;height:360px;"></div>';
+          html += '<div id="cooccChart" style="width:100%;height:300px;"></div>';
+          html += '</div>';
+
         if (data.term_matches && data.term_matches.length) {
           html += '<h3>Top Terms</h3><ul>';
-          data.term_matches.slice(0,20).forEach(t => {
-            html += `<li>${t.term} — ${t.frequency} (${t.category})</li>`;
+          // apply category filter and topN
+          const selectedCategory = categoryFilter.value;
+          const top = parseInt(topN.value, 10) || 50;
+          const filteredTerms = (data.term_matches || []).filter(t => selectedCategory === '__all' || t.category === selectedCategory);
+          filteredTerms.slice(0, top).forEach(t => {
+            // show small snippet if available
+            const snippet = (t.snippets && t.snippets.length) ? (' — "' + t.snippets[0].replace(/\n/g,' ') + '"') : '';
+            html += `<li>${t.term} — ${t.frequency} (${t.category})${snippet}</li>`;
           });
           html += '</ul>';
+
+          // Download buttons
+          if (data.csv) {
+            html += `<button id="downloadCsv">Download CSV</button>`;
+          }
+          html += `<button id="downloadJson">Download JSON</button>`;
         } else {
           html += '<p>No futures terms found.</p>';
         }
 
-        results.innerHTML = html;
+        // wire download buttons
+        setTimeout(() => {
+          const csvBtn = document.getElementById('downloadCsv');
+          if (csvBtn) {
+            csvBtn.addEventListener('click', () => {
+              const blob = new Blob([data.csv], {type: 'text/csv'});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `futures_analysis_${new Date().toISOString().replace(/[:.]/g,'')}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            });
+          }
+          const jsonBtn = document.getElementById('downloadJson');
+          if (jsonBtn) {
+            jsonBtn.addEventListener('click', () => {
+              const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `futures_analysis_${new Date().toISOString().replace(/[:.]/g,'')}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            });
+          }
+        }, 50);
+
+  results.innerHTML = html;
+
+        // Draw charts using Plotly
+        try {
+          // populate category filter
+          populateCategoryFilter(data.statistics.category_distribution || {});
+          drawCategoryChart(data.statistics);
+          drawTopTermsChart(data.term_matches, categoryFilter.value, parseInt(topN.value,10));
+          drawApproachChart(data.approach_scores);
+          drawCooccChart(data.co_occurrences, parseInt(topN.value,10));
+          drawCooccNetwork(data.co_occurrences, data.word_frequencies, parseInt(topN.value,10));
+        } catch (e) {
+          console.warn('Chart rendering failed', e);
+        }
+      }
+
+      function populateCategoryFilter(categoryDist) {
+        const keys = Object.keys(categoryDist || {});
+        // clear existing options except 'All'
+        categoryFilter.querySelectorAll('option:not([value="__all"])').forEach(o => o.remove());
+        keys.forEach(k => {
+          const opt = document.createElement('option'); opt.value = k; opt.text = `${k} (${categoryDist[k]})`;
+          categoryFilter.appendChild(opt);
+        });
+      }
+
+      function drawCategoryChart(statistics) {
+        const dist = statistics.category_distribution || {};
+        const categories = Object.keys(dist);
+        const freqs = Object.values(dist);
+        const data = [{
+          x: freqs,
+          y: categories,
+          type: 'bar',
+          orientation: 'h',
+          marker: { color: '#1f77b4' }
+        }];
+        const layout = { title: 'Futures Vocabulary by Category', margin: {l:180, r:20, t:40, b:40} };
+        Plotly.newPlot('categoryChart', data, layout, {responsive:true});
+      }
+
+      function drawTopTermsChart(termMatches) {
+        const items = (termMatches || []).slice(0,40).map(t => ({term: t.term, freq: t.frequency, category: t.category})).reverse();
+        const terms = items.map(i => i.term);
+        const freqs = items.map(i => i.freq);
+        const colors = items.map(i => {
+          // simple hash to pick color by category
+          let h = 0; for (let c=0;c<i.category.length;c++) h = (h<<5)-h + i.category.charCodeAt(c);
+          const hue = Math.abs(h) % 360; return `hsl(${hue},60%,45%)`;
+        });
+        const data = [{ x: freqs, y: terms, type:'bar', orientation:'h', marker: { color: colors } }];
+        const layout = { title: 'Top Terms (by frequency)', margin: {l:220, r:20, t:40, b:40}, height:420 };
+        Plotly.newPlot('topTermsChart', data, layout, {responsive:true});
+      }
+
+      function drawApproachChart(approachScores) {
+        const labels = Object.keys(approachScores || {});
+        const values = labels.map(l => approachScores[l]);
+        const data = [{ labels: labels, values: values, type: 'pie', hole: .3 }];
+        const layout = { title: 'Detected Methodological Approaches', height:360 };
+        Plotly.newPlot('approachChart', data, layout, {responsive:true});
+      }
+
+      function drawCooccChart(cooccArray) {
+        const pairs = (cooccArray || []).slice(0,20);
+        const labels = pairs.map(p => p.pair ? (p.pair.join(' — ')) : (p[0].join(' — ')));
+        const counts = pairs.map(p => p.count !== undefined ? p.count : p[1]);
+        const data = [{ x: counts.reverse(), y: labels.reverse(), type:'bar', orientation:'h', marker: { color: '#2ca02c' } }];
+        const layout = { title: 'Top Co-occurring Term Pairs', margin: {l:220, r:20, t:40, b:40}, height:300 };
+        Plotly.newPlot('cooccChart', data, layout, {responsive:true});
+      }
+
+      // Co-occurrence network visualization using vis-network
+      function drawCooccNetwork(cooccArray, freqs, topN=50) {
+        // Use vis-network via CDN
+        const containerId = 'cooccNetwork';
+        let container = document.getElementById(containerId);
+        if (!container) {
+          container = document.createElement('div');
+          container.id = containerId;
+          container.style.width = '100%';
+          container.style.height = '420px';
+          document.getElementById('charts').appendChild(container);
+        } else {
+          container.innerHTML = '';
+        }
+
+        const pairs = (cooccArray || []).slice(0, topN);
+        const nodesMap = {};
+        const edges = [];
+        pairs.forEach((p, idx) => {
+          const pair = p.pair || p[0];
+          const count = p.count !== undefined ? p.count : p[1];
+          const a = pair[0], b = pair[1];
+          if (!nodesMap[a]) nodesMap[a] = { id: a, label: a, value: freqs[a] || 1 };
+          if (!nodesMap[b]) nodesMap[b] = { id: b, label: b, value: freqs[b] || 1 };
+          edges.push({ from: a, to: b, value: count, title: `${count} co-occurrences` });
+        });
+
+        const nodes = Object.values(nodesMap).map(n => ({ id: n.id, label: n.label, value: n.value }));
+
+        // lazy-load vis-network if not present
+        (async function loadVisAndDraw(){
+          if (typeof vis === 'undefined') {
+            await loadScript('https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.js');
+          }
+          const data = { nodes: new vis.DataSet(nodes.map(n => ({ id: n.id, label: n.label, value: n.value }))), edges: new vis.DataSet(edges) };
+          const options = {
+            nodes: { shape: 'dot', scaling: { min: 10, max: 40 }, font: { size: 14 } },
+            edges: { width: 0.5, scaling: { min: 1, max: 6 }, smooth: true },
+            physics: { stabilization: true, barnesHut: { gravitationalConstant: -2000 } },
+            interaction: { hover: true, multiselect: true }
+          };
+          const network = new vis.Network(container, data, options);
+        })();
+      }
+
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
+        });
       }
     </script>
   </body>
